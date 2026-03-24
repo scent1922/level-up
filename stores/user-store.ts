@@ -16,6 +16,10 @@ import {
   STREAK_30_MULTIPLIER,
   POINTS_LEVEL_UP,
 } from '@/constants/balance';
+import {
+  sendLevelUpNotification,
+  sendStreakMilestoneNotification,
+} from '@/services/notification-service';
 
 function getXpForLevel(level: number): number {
   const tier = XP_TIERS.find((t) => level >= t.minLevel && level <= t.maxLevel);
@@ -91,6 +95,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
     if (leveledUp) {
       await updateUserLevel(db, user.id, newLevel, newXp);
       await updateUserPoints(db, user.id, newPoints);
+      sendLevelUpNotification(newLevel).catch((e) =>
+        console.warn('Failed to send level-up notification:', e)
+      );
     } else {
       await updateUserXP(db, user.id, newXp);
     }
@@ -156,6 +163,14 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     const lastCompletedAt = now.toISOString();
     await updateUserStreak(db, user.id, newStreak, lastCompletedAt);
+
+    // Fire streak milestone notifications at 7 and 30 days
+    if (newStreak === 7 || newStreak === 30) {
+      sendStreakMilestoneNotification(newStreak).catch((e) =>
+        console.warn('Failed to send streak milestone notification:', e)
+      );
+    }
+
     set({
       user: {
         ...user,

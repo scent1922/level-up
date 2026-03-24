@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { getDatabase } from '@/db/database';
 import { useUserStore } from '@/stores/user-store';
+import { configureNotifications } from '@/services/notification-service';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -34,6 +35,7 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
+    configureNotifications();
     getDatabase()
       .then(() => loadUser())
       .then(() => setDbReady(true))

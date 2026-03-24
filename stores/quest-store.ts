@@ -11,10 +11,15 @@ import { logQuestCompletion, getQuestLogsForDate } from '@/db/queries/quest-log-
 import { useUserStore } from '@/stores/user-store';
 import type { Quest } from '@/types';
 import { BASE_XP_PER_QUEST, POINTS_DAILY_COMPLETE } from '@/constants/balance';
+import {
+  scheduleQuestReminder,
+  cancelQuestReminder,
+} from '@/services/notification-service';
 
 interface QuestStore {
   quests: Quest[];
   todayQuests: Quest[];
+  notificationIds: Map<string, string>; // questId -> notificationId
   loadQuests: () => Promise<void>;
   createQuest: (params: Omit<Quest, 'id' | 'user_id' | 'created_at'>) => Promise<void>;
   completeQuest: (questId: string) => Promise<void>;
@@ -27,6 +32,7 @@ interface QuestStore {
 export const useQuestStore = create<QuestStore>((set, get) => ({
   quests: [],
   todayQuests: [],
+  notificationIds: new Map(),
 
   loadQuests: async () => {
     const user = useUserStore.getState().user;
@@ -51,6 +57,29 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
     });
     set((state) => ({ quests: [...state.quests, quest] }));
     get().refreshTodayQuests();
+
+    // Schedule reminder if enabled
+    if (quest.reminder_enabled && quest.reminder_time) {
+      const [hourStr, minuteStr] = quest.reminder_time.split(':');
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr, 10);
+      try {
+        const notifId = await scheduleQuestReminder(
+          quest.id,
+          quest.name,
+          hour,
+          minute,
+          quest.frequency_type
+        );
+        set((state) => {
+          const newMap = new Map(state.notificationIds);
+          newMap.set(quest.id, notifId);
+          return { notificationIds: newMap };
+        });
+      } catch (e) {
+        console.warn('Failed to schedule quest reminder:', e);
+      }
+    }
   },
 
   completeQuest: async (questId: string) => {
@@ -97,15 +126,70 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
       quests: state.quests.map((q) => (q.id === questId ? updated : q)),
     }));
     get().refreshTodayQuests();
+
+    // Cancel old reminder if it exists
+    const { notificationIds } = get();
+    const existingNotifId = notificationIds.get(questId);
+    if (existingNotifId) {
+      try {
+        await cancelQuestReminder(existingNotifId);
+      } catch (e) {
+        console.warn('Failed to cancel old quest reminder:', e);
+      }
+      set((state) => {
+        const newMap = new Map(state.notificationIds);
+        newMap.delete(questId);
+        return { notificationIds: newMap };
+      });
+    }
+
+    // Schedule new reminder if enabled
+    if (updated.reminder_enabled && updated.reminder_time) {
+      const [hourStr, minuteStr] = updated.reminder_time.split(':');
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr, 10);
+      try {
+        const notifId = await scheduleQuestReminder(
+          updated.id,
+          updated.name,
+          hour,
+          minute,
+          updated.frequency_type
+        );
+        set((state) => {
+          const newMap = new Map(state.notificationIds);
+          newMap.set(questId, notifId);
+          return { notificationIds: newMap };
+        });
+      } catch (e) {
+        console.warn('Failed to schedule updated quest reminder:', e);
+      }
+    }
   },
 
   deleteQuest: async (questId: string) => {
+    // Cancel reminder before deleting
+    const { notificationIds } = get();
+    const existingNotifId = notificationIds.get(questId);
+    if (existingNotifId) {
+      try {
+        await cancelQuestReminder(existingNotifId);
+      } catch (e) {
+        console.warn('Failed to cancel quest reminder on delete:', e);
+      }
+    }
+
     const db = await getDatabase();
     await dbDeleteQuest(db, questId);
-    set((state) => ({
-      quests: state.quests.filter((q) => q.id !== questId),
-      todayQuests: state.todayQuests.filter((q) => q.id !== questId),
-    }));
+    set((state) => {
+      const newMap = new Map(state.notificationIds);
+      newMap.delete(questId);
+      return {
+        quests: state.quests.filter((q) => q.id !== questId),
+        todayQuests: state.todayQuests.filter((q) => q.id !== questId),
+        notificationIds: newMap,
+      };
+    });
   },
 
   refreshTodayQuests: () => {
