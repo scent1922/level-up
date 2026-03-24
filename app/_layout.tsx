@@ -1,10 +1,11 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, Redirect } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { getDatabase } from '@/db/database';
+import { useUserStore } from '@/stores/user-store';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -24,6 +25,8 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
   const [dbReady, setDbReady] = useState(false);
+  const isOnboarded = useUserStore((state) => state.isOnboarded);
+  const loadUser = useUserStore((state) => state.loadUser);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
@@ -32,6 +35,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     getDatabase()
+      .then(() => loadUser())
       .then(() => setDbReady(true))
       .catch((e) => {
         console.error('Failed to initialize database:', e);
@@ -55,8 +59,10 @@ export default function RootLayout() {
     <ThemeProvider value={DarkTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
+      {!isOnboarded && <Redirect href="/onboarding" />}
     </ThemeProvider>
   );
 }
