@@ -1,32 +1,39 @@
 import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
-import Colors from '@/constants/Colors';
+import { useUserStore } from '@/stores/user-store';
+import { useQuestStore } from '@/stores/quest-store';
+import StreakBanner from '@/components/history/StreakBanner';
+import CalendarView from '@/components/history/CalendarView';
+import WeeklyStats from '@/components/history/WeeklyStats';
 
 export default function HistoryScreen() {
+  const user = useUserStore((state) => state.user);
+  const quests = useQuestStore((state) => state.quests);
+
+  if (!user) {
+    return <View style={styles.container} />;
+  }
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>기록</Text>
-      <Text style={styles.subtitle}>활동 기록 — Coming Soon</Text>
-    </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      <StreakBanner streakCount={user.streak_count} />
+      <CalendarView userId={user.id} quests={quests} />
+      <WeeklyStats userId={user.id} quests={quests} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#0A0A0A',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: Colors.dark.tint,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: Colors.dark.tabIconDefault,
+  contentContainer: {
+    paddingBottom: 32,
   },
 });
