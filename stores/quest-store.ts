@@ -7,7 +7,7 @@ import {
   updateQuest as dbUpdateQuest,
   deleteQuest as dbDeleteQuest,
 } from '@/db/queries/quest-queries';
-import { logQuestCompletion, getQuestLogsForDate } from '@/db/queries/quest-log-queries';
+import { logQuestCompletion, getQuestLogsForDate, getWeeklyCompletionCount } from '@/db/queries/quest-log-queries';
 import { useUserStore } from '@/stores/user-store';
 import type { Quest } from '@/types';
 import { BASE_XP_PER_QUEST, POINTS_DAILY_COMPLETE } from '@/constants/balance';
@@ -15,6 +15,7 @@ import {
   scheduleQuestReminder,
   cancelQuestReminder,
 } from '@/services/notification-service';
+import { isQuestDueToday, getWeekStart } from '@/services/quest-scheduler';
 
 interface QuestStore {
   quests: Quest[];
@@ -25,7 +26,7 @@ interface QuestStore {
   completeQuest: (questId: string) => Promise<void>;
   updateQuest: (questId: string, updates: Partial<Quest>) => Promise<void>;
   deleteQuest: (questId: string) => Promise<void>;
-  refreshTodayQuests: () => void;
+  refreshTodayQuests: () => Promise<void>;
   checkDailyComplete: () => Promise<boolean>;
 }
 
@@ -41,7 +42,7 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
     const db = await getDatabase();
     const quests = await getQuests(db, user.id);
     set({ quests });
-    get().refreshTodayQuests();
+    await get().refreshTodayQuests();
   },
 
   createQuest: async (params) => {
@@ -56,7 +57,7 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
       ...params,
     });
     set((state) => ({ quests: [...state.quests, quest] }));
-    get().refreshTodayQuests();
+    await get().refreshTodayQuests();
 
     // Schedule reminder if enabled
     if (quest.reminder_enabled && quest.reminder_time) {
@@ -125,7 +126,7 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
     set((state) => ({
       quests: state.quests.map((q) => (q.id === questId ? updated : q)),
     }));
-    get().refreshTodayQuests();
+    await get().refreshTodayQuests();
 
     // Cancel old reminder if it exists
     const { notificationIds } = get();
@@ -192,13 +193,25 @@ export const useQuestStore = create<QuestStore>((set, get) => ({
     });
   },
 
-  refreshTodayQuests: () => {
+  refreshTodayQuests: async () => {
     const { quests } = get();
-    // Placeholder: Task 5 will implement full quest-scheduler logic.
-    // For now, show all active daily quests.
-    const todayQuests = quests.filter(
-      (q) => q.is_active && q.frequency_type === 'daily'
-    );
+    const today = new Date();
+    const user = useUserStore.getState().user;
+
+    const db = user ? await getDatabase() : null;
+    const weekStart = getWeekStart(today).toISOString();
+
+    const todayQuests: Quest[] = [];
+    for (const q of quests) {
+      let weeklyCompletions: number | undefined;
+      if (q.frequency_type === 'n_per_week' && db) {
+        weeklyCompletions = await getWeeklyCompletionCount(db, q.id, weekStart);
+      }
+      if (isQuestDueToday(q, today, weeklyCompletions)) {
+        todayQuests.push(q);
+      }
+    }
+
     set({ todayQuests });
   },
 
