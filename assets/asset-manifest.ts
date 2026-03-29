@@ -1,5 +1,29 @@
 import { ImageSourcePropType } from 'react-native';
 
+// Background images (behind shelter, no transparency)
+export const BackgroundAssets: Record<string, ImageSourcePropType> = {
+  city: require('./backgrounds/bg_city.png'),
+  coast: require('./backgrounds/bg_coast.png'),
+  forest: require('./backgrounds/bg_forest.png'),
+  desert: require('./backgrounds/bg_desert.png'),
+};
+
+// Sprite sheets (5 frames: idle, walk1, walk2, walk1-mirror, walk2-mirror)
+export const AvatarSprites: Record<string, ImageSourcePropType> = {
+  survivor_a: require('./avatars/sprites/sprite_a.png'),
+  survivor_b: require('./avatars/sprites/sprite_b.png'),
+  survivor_c: require('./avatars/sprites/sprite_c.png'),
+  survivor_d: require('./avatars/sprites/sprite_d.png'),
+};
+
+export function getBackground(presetId: string): ImageSourcePropType {
+  return BackgroundAssets[presetId] ?? BackgroundAssets.city;
+}
+
+export function getAvatarSprite(presetId: string): ImageSourcePropType {
+  return AvatarSprites[presetId] ?? AvatarSprites.survivor_a;
+}
+
 export const ShelterAssets: Record<string, Record<number, ImageSourcePropType>> = {
   city: {
     1: require('./shelters/shelter_city_1.png'),
