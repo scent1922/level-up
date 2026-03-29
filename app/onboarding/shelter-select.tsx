@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { router } from 'expo-router';
 import { PresetCard } from '@/components/onboarding/PresetCard';
 import { SHELTER_PRESETS } from '@/constants/presets';
+import { ShelterAssets } from '@/assets/asset-manifest';
 
 export default function ShelterSelectScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export default function ShelterSelectScreen() {
               name={preset.name}
               description={preset.description}
               color={preset.color}
+              image={ShelterAssets[preset.id]?.[1]}
               selected={selectedId === preset.id}
               onPress={() => setSelectedId(preset.id)}
             />

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { router, useLocalSearchParams } from 'expo-router';
 import { PresetCard } from '@/components/onboarding/PresetCard';
 import { AVATAR_PRESETS } from '@/constants/presets';
+import { AvatarPortraits } from '@/assets/asset-manifest';
 
 export default function AvatarSelectScreen() {
   const { shelterId } = useLocalSearchParams<{ shelterId: string }>();
@@ -29,6 +30,7 @@ export default function AvatarSelectScreen() {
               key={preset.id}
               name={preset.name}
               color={preset.color}
+              image={AvatarPortraits[preset.id]}
               selected={selectedId === preset.id}
               onPress={() => setSelectedId(preset.id)}
             />

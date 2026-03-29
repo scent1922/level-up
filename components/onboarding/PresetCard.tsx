@@ -1,15 +1,16 @@
 import React from 'react';
-import { TouchableOpacity, View, Text, StyleSheet, Animated } from 'react-native';
+import { TouchableOpacity, View, Text, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
 
 interface PresetCardProps {
   name: string;
   description?: string;
   color: string;
+  image?: ImageSourcePropType;
   selected: boolean;
   onPress: () => void;
 }
 
-export function PresetCard({ name, description, color, selected, onPress }: PresetCardProps) {
+export function PresetCard({ name, description, color, image, selected, onPress }: PresetCardProps) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
@@ -28,7 +29,11 @@ export function PresetCard({ name, description, color, selected, onPress }: Pres
         onPress={onPress}
         activeOpacity={0.8}
       >
-        <View style={[styles.colorBlock, { backgroundColor: color }]} />
+        {image ? (
+          <Image source={image} style={styles.colorBlock} resizeMode="cover" />
+        ) : (
+          <View style={[styles.colorBlock, { backgroundColor: color }]} />
+        )}
         <View style={styles.info}>
           <Text style={styles.name}>{name}</Text>
           {description ? <Text style={styles.description}>{description}</Text> : null}
