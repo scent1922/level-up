@@ -1,8 +1,8 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, Redirect } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import 'react-native-reanimated';
 import { getDatabase } from '@/db/database';
@@ -67,29 +67,8 @@ export default function RootLayout() {
     }
   }, [loaded, dbReady]);
 
-  // Run decay check whenever shelter/user data is loaded
-  useEffect(() => {
-    if (shelter && user) {
-      runDecayCheck();
-    }
-  }, [shelter?.id, user?.id]);
-
-  // AppState listener: re-check decay when app comes to foreground
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (
-        appStateRef.current !== 'active' &&
-        nextState === 'active'
-      ) {
-        runDecayCheck();
-      }
-      appStateRef.current = nextState;
-    });
-
-    return () => subscription.remove();
-  }, []);
-
-  const runDecayCheck = async () => {
+  // Fix Issue 4: wrap in useCallback so AppState listener always calls the latest version
+  const runDecayCheck = useCallback(async () => {
     await checkDecay();
 
     const currentShelter = useShelterStore.getState().shelter;
@@ -115,21 +94,47 @@ export default function RootLayout() {
         setShowRevival(true);
       }
     }
-  };
+  }, [checkDecay]);
+
+  // Fix Issue 4: use a ref so the AppState listener always calls the latest runDecayCheck
+  const runDecayCheckRef = useRef(runDecayCheck);
+  runDecayCheckRef.current = runDecayCheck;
+
+  // Run decay check whenever shelter/user data is loaded
+  useEffect(() => {
+    if (shelter && user) {
+      runDecayCheck();
+    }
+  }, [shelter?.id, user?.id]);
+
+  // AppState listener: re-check decay when app comes to foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (
+        appStateRef.current !== 'active' &&
+        nextState === 'active'
+      ) {
+        runDecayCheckRef.current();
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   if (!loaded || !dbReady) {
     return null;
   }
 
+  // Fix Issue 1: use initialRouteName instead of rendering <Redirect> outside <Stack>
   return (
     // Always use DarkTheme — Level-Up is a post-apocalyptic dark-themed app
     <ThemeProvider value={DarkTheme}>
-      <Stack>
+      <Stack initialRouteName={isOnboarded ? '(tabs)' : 'onboarding'}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
-      {!isOnboarded && <Redirect href="/onboarding" />}
 
       {/* Decay modals — rendered at root level so they appear over all tabs */}
       <DestructionScene visible={showDestruction} />

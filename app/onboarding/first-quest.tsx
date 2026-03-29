@@ -16,15 +16,20 @@ import { useShelterStore } from '@/stores/shelter-store';
 import { useQuestStore } from '@/stores/quest-store';
 
 export default function FirstQuestScreen() {
-  const { shelterId, avatarId } = useLocalSearchParams<{
-    shelterId: string;
-    avatarId: string;
-  }>();
+  // Fix Issue 5: typed params with array guards for type safety
+  const params = useLocalSearchParams<{ shelterId: string; avatarId: string }>();
+  const shelterId = Array.isArray(params.shelterId) ? params.shelterId[0] : params.shelterId;
+  const avatarId = Array.isArray(params.avatarId) ? params.avatarId[0] : params.avatarId;
 
   const [questName, setQuestName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleStart() {
+    if (!shelterId || !avatarId) {
+      Alert.alert('오류', '쉘터와 아바타를 먼저 선택해주세요');
+      return;
+    }
+
     if (!questName.trim()) {
       Alert.alert('퀘스트 이름을 입력하세요');
       return;

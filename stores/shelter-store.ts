@@ -14,6 +14,7 @@ import {
   equipItem,
   deleteAvatarState,
 } from '@/db/queries/avatar-queries';
+import { updateUserStreak } from '@/db/queries/user-queries';
 import { deactivateAllQuests } from '@/db/queries/quest-queries';
 import { deleteQuestLogsByUser } from '@/db/queries/quest-log-queries';
 import { useUserStore } from '@/stores/user-store';
@@ -196,6 +197,16 @@ export const useShelterStore = create<ShelterStore>((set, get) => ({
     const db = await getDatabase();
     await updateDecayStage(db, shelter.id, 0);
     set({ shelter: { ...shelter, decay_stage: 0 } });
+
+    // Fix Issue 7: reset last_quest_completed_at to now so decay doesn't immediately re-trigger
+    const user = userStore.user;
+    if (user) {
+      const now = new Date().toISOString();
+      await updateUserStreak(db, user.id, user.streak_count, now);
+      // Reload user state to sync the updated last_quest_completed_at
+      await useUserStore.getState().loadUser();
+    }
+
     return true;
   },
 

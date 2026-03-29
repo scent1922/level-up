@@ -36,7 +36,8 @@ function FallingParticle({ index }: { index: number }) {
     const duration = 1500 + Math.random() * 1500;
     const delay = index * 120;
 
-    setTimeout(() => {
+    // Fix Issue 3: store timer handle so it can be cleared on unmount
+    const timer = setTimeout(() => {
       translateY.value = withRepeat(
         withTiming(height + 20, { duration, easing: Easing.in(Easing.quad) }),
         -1,
@@ -56,6 +57,8 @@ function FallingParticle({ index }: { index: number }) {
         false
       );
     }, delay);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const style = useAnimatedStyle(() => ({

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Image, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -46,7 +46,15 @@ function ShelterCanvasInner({ shelter, avatarPresetId, decayStage }: ShelterCanv
   const avatarScreenX = useSharedValue(0);
   const avatarScreenY = useSharedValue(0);
 
-  const installedFacilities: string[] = JSON.parse(shelter.installed_facilities);
+  // Fix Issue 2 & 6: useMemo prevents new array reference each render (breaks update loop)
+  // and guards against malformed JSON
+  const installedFacilities = useMemo<string[]>(() => {
+    try {
+      return JSON.parse(shelter?.installed_facilities || '[]');
+    } catch {
+      return [];
+    }
+  }, [shelter?.installed_facilities]);
   const origin = calcCanvasOrigin(SCREEN_WIDTH, installedFacilities);
 
   // Get animated style from avatar motion system
