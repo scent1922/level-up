@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Image, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,12 +9,18 @@ import Animated, {
 
 import type { ShelterState } from '@/types';
 import { AvatarEngine } from '@/engine/avatar-engine';
-import { buildShelterScene, calcCanvasOrigin, type RenderObject } from '@/engine/shelter-renderer';
-import { SHELTER_PRESETS } from '@/constants/presets';
+import { calcCanvasOrigin } from '@/engine/shelter-renderer';
+import { useAvatarMotion } from '@/engine/avatar-motion';
+import type { AvatarMotionState } from '@/engine/avatar-motion';
+import { getShelterImage, getAvatarIngame } from '@/assets/asset-manifest';
 
 const CANVAS_HEIGHT = 400;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const UPDATE_INTERVAL_MS = 100; // 10fps update loop
+
+const AVATAR_W = 48;
+const AVATAR_H = 64;
+const TILE_H = 32;
 
 // Fixed facility positions for avatar engine
 const FACILITY_POSITIONS = [
@@ -32,42 +38,27 @@ interface ShelterCanvasProps {
   decayStage: number;
 }
 
-export function ShelterCanvas({ shelter, avatarPresetId, decayStage }: ShelterCanvasProps) {
+function ShelterCanvasInner({ shelter, avatarPresetId, decayStage }: ShelterCanvasProps) {
   const engineRef = useRef<AvatarEngine>(new AvatarEngine(1, 1));
   const lastTimeRef = useRef<number>(Date.now());
-
-  const [renderObjects, setRenderObjects] = useState<RenderObject[]>([]);
-  const [avatarGridPos, setAvatarGridPos] = useState({ x: 1, y: 1 });
+  const [avatarState, setAvatarState] = React.useState<AvatarMotionState>('idle');
 
   const avatarScreenX = useSharedValue(0);
   const avatarScreenY = useSharedValue(0);
 
   const installedFacilities: string[] = JSON.parse(shelter.installed_facilities);
-  const preset = SHELTER_PRESETS.find((p) => p.id === shelter.preset_id);
-  const presetColor = preset?.color ?? '#4A4A4A';
-
   const origin = calcCanvasOrigin(SCREEN_WIDTH, installedFacilities);
 
-  const rebuildScene = useCallback(
-    (avatarPos: { x: number; y: number }) => {
-      const objects = buildShelterScene(
-        shelter,
-        presetColor,
-        installedFacilities,
-        avatarPos,
-        engineRef.current.state,
-        decayStage,
-      );
-      setRenderObjects(objects);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [shelter.installed_facilities, shelter.preset_id, decayStage, presetColor],
-  );
+  // Get animated style from avatar motion system
+  const motionStyle = useAvatarMotion(avatarState);
 
-  // Initial build
-  useEffect(() => {
-    rebuildScene(engineRef.current.getGridPosition());
-  }, [rebuildScene]);
+  // Position animated style (drives the avatar across the canvas)
+  const positionStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: avatarScreenX.value },
+      { translateY: avatarScreenY.value },
+    ],
+  }));
 
   // Avatar update loop
   useEffect(() => {
@@ -79,15 +70,12 @@ export function ShelterCanvas({ shelter, avatarPresetId, decayStage }: ShelterCa
       const engine = engineRef.current;
       engine.update(delta, installedFacilities, FACILITY_POSITIONS);
 
-      const gridPos = engine.getGridPosition();
-      setAvatarGridPos({ x: gridPos.x, y: gridPos.y });
-      rebuildScene(gridPos);
+      // Sync motion state from engine state
+      const engineState = engine.state;
+      setAvatarState(engineState as AvatarMotionState);
 
-      // Drive animated values for smooth avatar movement
+      // Drive animated position values for smooth avatar movement
       const screenPos = engine.getScreenPosition();
-      const AVATAR_W = 20;
-      const AVATAR_H = 28;
-      const TILE_H = 32;
       avatarScreenX.value = withTiming(
         origin.originX + screenPos.x - AVATAR_W / 2,
         { duration: UPDATE_INTERVAL_MS * 0.9, easing: Easing.linear },
@@ -99,61 +87,28 @@ export function ShelterCanvas({ shelter, avatarPresetId, decayStage }: ShelterCa
     }, UPDATE_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [installedFacilities, rebuildScene, origin.originX, origin.originY, avatarScreenX, avatarScreenY]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [installedFacilities, origin.originX, origin.originY, avatarScreenX, avatarScreenY]);
 
-  const animatedAvatarStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: avatarScreenX.value },
-      { translateY: avatarScreenY.value },
-    ],
-  }));
+  const shelterSource = getShelterImage(shelter.preset_id, shelter.expansion_level);
+  const avatarSource = getAvatarIngame(avatarPresetId);
 
   return (
     <View style={[styles.canvas, { width: SCREEN_WIDTH, height: CANVAS_HEIGHT }]}>
-      {renderObjects.map((obj) => {
-        if (obj.type === 'avatar') {
-          // Avatar is rendered separately with animation
-          return null;
-        }
+      {/* Shelter background image — single pre-rendered scene */}
+      <Image
+        source={shelterSource}
+        style={styles.shelterImage}
+        resizeMode="contain"
+      />
 
-        return (
-          <View
-            key={obj.id}
-            style={[
-              styles.renderObj,
-              {
-                left: origin.originX + obj.screenX,
-                top: origin.originY + obj.screenY,
-                width: obj.width,
-                height: obj.height,
-                backgroundColor: obj.color,
-                borderColor: obj.borderColor ?? obj.color,
-                zIndex: obj.zIndex,
-                opacity: obj.opacity ?? 1,
-                borderWidth: obj.type === 'floor' ? 1 : obj.type === 'wall' ? 0 : 2,
-                borderRadius:
-                  obj.type === 'facility' ? 4 : obj.type === 'floor' ? 0 : 0,
-              },
-            ]}
-          >
-            {obj.label && obj.type === 'facility' && (
-              <Text style={styles.facilityLabel} numberOfLines={1}>
-                {obj.label}
-              </Text>
-            )}
-          </View>
-        );
-      })}
-
-      {/* Animated avatar — rendered on top */}
-      <Animated.View
-        style={[
-          styles.renderObj,
-          styles.avatar,
-          animatedAvatarStyle,
-        ]}
-      >
-        <Text style={styles.avatarLabel}>👤</Text>
+      {/* Avatar: position driven by avatar-engine, visual motion by avatar-motion */}
+      <Animated.View style={[styles.avatarContainer, positionStyle]}>
+        <Animated.Image
+          source={avatarSource}
+          style={[styles.avatar, motionStyle]}
+          resizeMode="contain"
+        />
       </Animated.View>
 
       {/* Decay status indicator */}
@@ -170,38 +125,32 @@ export function ShelterCanvas({ shelter, avatarPresetId, decayStage }: ShelterCa
   );
 }
 
+export function ShelterCanvas(props: ShelterCanvasProps) {
+  return <ShelterCanvasInner {...props} />;
+}
+
 const styles = StyleSheet.create({
   canvas: {
     backgroundColor: '#0D0D1A',
     overflow: 'hidden',
     position: 'relative',
   },
-  renderObj: {
+  shelterImage: {
     position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
   },
-  facilityLabel: {
-    fontSize: 9,
-    color: '#FFF',
-    fontWeight: '700',
-    textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  avatar: {
-    width: 20,
-    height: 28,
-    borderRadius: 10,
-    backgroundColor: '#F9A825',
-    borderWidth: 2,
-    borderColor: '#E65100',
+  avatarContainer: {
+    position: 'absolute',
+    width: AVATAR_W,
+    height: AVATAR_H,
     zIndex: 1000,
   },
-  avatarLabel: {
-    fontSize: 12,
+  avatar: {
+    width: AVATAR_W,
+    height: AVATAR_H,
   },
   decayBanner: {
     position: 'absolute',
@@ -213,6 +162,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     alignItems: 'center',
+    zIndex: 2000,
   },
   decayText: {
     color: '#FFB3B3',
