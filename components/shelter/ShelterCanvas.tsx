@@ -21,9 +21,9 @@ const FRAME_WIDTH = 64;
 const FRAME_HEIGHT = 64;
 const FRAME_COUNT = 5;
 
-// Display size for the sprite on screen
-const SPRITE_DISPLAY_W = 48;
-const SPRITE_DISPLAY_H = 48;
+// Display size for the sprite on screen — small relative to shelter
+const SPRITE_DISPLAY_W = 32;
+const SPRITE_DISPLAY_H = 32;
 
 // Avatar tile height offset (matches original layout)
 const TILE_H = 32;
@@ -164,12 +164,15 @@ function ShelterCanvasInner({ shelter, avatarPresetId, decayStage }: ShelterCanv
 
   return (
     <View style={[styles.canvas, { width: SCREEN_WIDTH, height: CANVAS_HEIGHT }]}>
-      {/* Layer 1: Background image — full container, behind everything, no transparency */}
-      <Image
-        source={backgroundSource}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      />
+      {/* Layer 1: Background image — full container, behind everything */}
+      <View style={[styles.backgroundImage, { backgroundColor: '#1a1020' }]}>
+        <Image
+          source={backgroundSource}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+          onError={(e) => console.log('BG image load error:', e.nativeEvent.error)}
+        />
+      </View>
 
       {/* Layer 2: Shelter PNG — transparent background, overlays on background */}
       <Image
@@ -215,6 +218,7 @@ const styles = StyleSheet.create({
   canvas: {
     overflow: 'hidden',
     position: 'relative',
+    backgroundColor: '#0A0A0A',
   },
   // Layer 1: full-bleed background, no transparency
   backgroundImage: {
