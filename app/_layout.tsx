@@ -1,6 +1,6 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
@@ -18,10 +18,8 @@ export {
   ErrorBoundary,
 } from 'expo-router';
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
+// Note: Do NOT set unstable_settings.initialRouteName here
+// — it's determined dynamically based on isOnboarded state in the component
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -126,15 +124,15 @@ export default function RootLayout() {
     return null;
   }
 
-  // Fix Issue 1: use initialRouteName instead of rendering <Redirect> outside <Stack>
+  // Routing: if not onboarded, redirect to onboarding before showing tabs
   return (
-    // Always use DarkTheme — Level-Up is a post-apocalyptic dark-themed app
     <ThemeProvider value={DarkTheme}>
-      <Stack initialRouteName={isOnboarded ? '(tabs)' : 'onboarding'}>
+      <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
+      {!isOnboarded && <Redirect href="/onboarding" />}
 
       {/* Decay modals — rendered at root level so they appear over all tabs */}
       <DestructionScene visible={showDestruction} />
