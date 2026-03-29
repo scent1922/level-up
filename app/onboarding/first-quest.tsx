@@ -8,20 +8,34 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useUserStore } from '@/stores/user-store';
 import { useShelterStore } from '@/stores/shelter-store';
 import { useQuestStore } from '@/stores/quest-store';
+import FrequencyPicker, { type FrequencyValue } from '@/components/quest/FrequencyPicker';
+import type { FrequencyType } from '@/types';
+
+const FREQUENCY_LABELS: Record<FrequencyType, string> = {
+  daily: '매일',
+  specific_days: '특정 요일',
+  every_n_days: 'N일마다',
+  n_per_week: '주 N회',
+};
 
 export default function FirstQuestScreen() {
-  // Fix Issue 5: typed params with array guards for type safety
   const params = useLocalSearchParams<{ shelterId: string; avatarId: string }>();
   const shelterId = Array.isArray(params.shelterId) ? params.shelterId[0] : params.shelterId;
   const avatarId = Array.isArray(params.avatarId) ? params.avatarId[0] : params.avatarId;
 
   const [questName, setQuestName] = useState('');
+  const [frequencyType, setFrequencyType] = useState<FrequencyType>('daily');
+  const [frequencyValue, setFrequencyValue] = useState('[]');
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [reminderHour, setReminderHour] = useState('09');
+  const [reminderMinute, setReminderMinute] = useState('00');
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleStart() {
@@ -37,31 +51,29 @@ export default function FirstQuestScreen() {
 
     setIsLoading(true);
     try {
-      // 1. Request push notification permission
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
         console.log('Push notification permission not granted');
       }
 
-      // 2. Create user
       await useUserStore.getState().createNewUser(shelterId, avatarId);
-
-      // 3. Create shelter and avatar
       await useShelterStore.getState().createShelter(shelterId);
       await useShelterStore.getState().createAvatar(avatarId);
 
-      // 4. Create first quest
+      const h = parseInt(reminderHour, 10) || 9;
+      const m = parseInt(reminderMinute, 10) || 0;
+      const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
       await useQuestStore.getState().createQuest({
         name: questName.trim(),
         description: null,
-        frequency_type: 'daily',
-        frequency_value: JSON.stringify([]),
-        reminder_time: '09:00',
-        reminder_enabled: status === 'granted',
+        frequency_type: frequencyType,
+        frequency_value: frequencyValue,
+        reminder_time: timeStr,
+        reminder_enabled: reminderEnabled && status === 'granted',
         is_active: true,
       });
 
-      // 5. Navigate to main app
       router.replace('/(tabs)');
     } catch (e) {
       console.error('Onboarding completion failed:', e);
@@ -69,6 +81,11 @@ export default function FirstQuestScreen() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function handleFrequencyChange(result: FrequencyValue) {
+    setFrequencyType(result.type);
+    setFrequencyValue(result.value);
   }
 
   return (
@@ -98,16 +115,52 @@ export default function FirstQuestScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>반복 주기</Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>매일</Text>
-          </View>
+          <FrequencyPicker
+            value={{ type: frequencyType, value: frequencyValue }}
+            onChange={handleFrequencyChange}
+          />
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>알림 시간</Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>09:00</Text>
+          <Text style={styles.label}>알림</Text>
+          <View style={styles.reminderRow}>
+            <Text style={styles.reminderLabel}>알림 받기</Text>
+            <Switch
+              value={reminderEnabled}
+              onValueChange={setReminderEnabled}
+              trackColor={{ false: '#2A2A2A', true: '#C8A84B' }}
+              thumbColor="#FFFFFF"
+            />
           </View>
+          {reminderEnabled && (
+            <View style={styles.timeRow}>
+              <TextInput
+                style={styles.timeInput}
+                value={reminderHour}
+                onChangeText={(t) => {
+                  const num = t.replace(/[^0-9]/g, '').slice(0, 2);
+                  setReminderHour(num);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="09"
+                placeholderTextColor="#555555"
+              />
+              <Text style={styles.timeSeparator}>:</Text>
+              <TextInput
+                style={styles.timeInput}
+                value={reminderMinute}
+                onChangeText={(t) => {
+                  const num = t.replace(/[^0-9]/g, '').slice(0, 2);
+                  setReminderMinute(num);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="00"
+                placeholderTextColor="#555555"
+              />
+            </View>
+          )}
         </View>
       </View>
 
@@ -142,7 +195,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   header: {
-    marginBottom: 40,
+    marginBottom: 32,
   },
   title: {
     color: '#FFFFFF',
@@ -158,8 +211,8 @@ const styles = StyleSheet.create({
   },
   form: {
     flex: 1,
-    gap: 28,
-    marginBottom: 40,
+    gap: 24,
+    marginBottom: 32,
   },
   field: {
     gap: 10,
@@ -180,18 +233,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  badge: {
+  reminderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: '#1A1A1A',
     borderWidth: 2,
     borderColor: '#2A2A2A',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    alignSelf: 'flex-start',
   },
-  badgeText: {
-    color: '#888888',
+  reminderLabel: {
+    color: '#CCCCCC',
     fontSize: 14,
-    fontWeight: '600',
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  timeInput: {
+    backgroundColor: '#1A1A1A',
+    borderWidth: 2,
+    borderColor: '#2A2A2A',
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    width: 60,
+    textAlign: 'center',
+    paddingVertical: 10,
+  },
+  timeSeparator: {
+    color: '#888888',
+    fontSize: 20,
+    fontWeight: '700',
   },
   button: {
     backgroundColor: '#C8A84B',
